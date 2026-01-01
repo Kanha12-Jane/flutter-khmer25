@@ -70,6 +70,7 @@ flutter:
     - assets/data/category.json
     - assets/data/product.json
     - assets/data/bannerImages.json
+    - assets/images/logo.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

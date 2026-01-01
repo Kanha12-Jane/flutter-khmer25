@@ -123,11 +123,12 @@ class _HomePageState extends State<HomePage> {
               children: [
                 SizedBox(
                   height: 48,
-                  child: Image.network(
-                    'https://khmer25.com/_nuxt/logo-mart.BD1f-q70.png',
+                  child: Image.asset(
+                    'assets/images/logo.png',
                     fit: BoxFit.contain,
                   ),
                 ),
+
                 const SizedBox(height: 12),
                 const Text(
                   'Khmer25 Mart',
@@ -221,10 +222,7 @@ class _HomePageState extends State<HomePage> {
           const SizedBox(width: 8),
           SizedBox(
             height: 32,
-            child: Image.network(
-              'https://khmer25.com/_nuxt/logo-mart.BD1f-q70.png',
-              fit: BoxFit.contain,
-            ),
+            child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
           ),
         ],
       ),
