@@ -1,7 +1,7 @@
 import 'dart:convert';
-import 'dart:io';
+import 'dart:typed_data';
 
-import 'package:flutter/material.dart'; // ✅ REQUIRED for BuildContext
+import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
@@ -9,6 +9,12 @@ import 'package:provider/provider.dart';
 
 import '../core/api_config.dart';
 import 'auth_provider.dart';
+
+class PickedImageBytes {
+  final Uint8List bytes;
+  final String name;
+  PickedImageBytes({required this.bytes, required this.name});
+}
 
 class ProfileProvider extends ChangeNotifier {
   Map<String, dynamic>? _me;
@@ -30,14 +36,14 @@ class ProfileProvider extends ChangeNotifier {
   }
 
   Map<String, String> _bearerHeaders(String token) => {
-    "Accept": "application/json",
-    "Authorization": "Bearer $token",
-  };
+        "Accept": "application/json",
+        "Authorization": "Bearer $token",
+      };
 
   Map<String, String> _bearerJsonHeaders(String token) => {
-    ..._bearerHeaders(token),
-    "Content-Type": "application/json",
-  };
+        ..._bearerHeaders(token),
+        "Content-Type": "application/json",
+      };
 
   String? get imageUrl {
     final profile = _me?["profile"];
@@ -53,11 +59,9 @@ class ProfileProvider extends ChangeNotifier {
     return null;
   }
 
-  // ✅ get token from AuthProvider
   Future<String?> _token(BuildContext context) async {
     final auth = context.read<AuthProvider>();
     final t = await auth.getValidAccessToken();
-
     if (t == null || t.isEmpty) {
       _setError("Session expired. Please login again.");
       return null;
@@ -182,17 +186,21 @@ class ProfileProvider extends ChangeNotifier {
   }
 
   // -------------------------
-  // Pick image
+  // Pick image (WEB + MOBILE)
   // -------------------------
-  Future<File?> pickImage() async {
+  Future<PickedImageBytes?> pickImageBytes() async {
     try {
+      _setError(null);
       final picker = ImagePicker();
       final x = await picker.pickImage(
         source: ImageSource.gallery,
         imageQuality: 85,
       );
       if (x == null) return null;
-      return File(x.path);
+
+      final bytes = await x.readAsBytes();
+      final name = x.name.isNotEmpty ? x.name : "profile.jpg";
+      return PickedImageBytes(bytes: bytes, name: name);
     } catch (e) {
       _setError("Pick image error: $e");
       return null;
@@ -202,8 +210,13 @@ class ProfileProvider extends ChangeNotifier {
   // -------------------------
   // PATCH /api/users/profile/image/
   // field: image
+  // WEB + MOBILE using bytes
   // -------------------------
-  Future<bool> uploadProfileImage(BuildContext context, File file) async {
+  Future<bool> uploadProfileImageBytes(
+    BuildContext context, {
+    required Uint8List bytes,
+    required String filename,
+  }) async {
     final token = await _token(context);
     if (token == null) return false;
 
@@ -216,7 +229,14 @@ class ProfileProvider extends ChangeNotifier {
 
       req.headers["Accept"] = "application/json";
       req.headers["Authorization"] = "Bearer $token";
-      req.files.add(await http.MultipartFile.fromPath("image", file.path));
+
+      req.files.add(
+        http.MultipartFile.fromBytes(
+          "image",
+          bytes,
+          filename: filename,
+        ),
+      );
 
       final streamed = await req.send().timeout(const Duration(seconds: 30));
       final body = await streamed.stream.bytesToString();
@@ -247,7 +267,6 @@ class ProfileProvider extends ChangeNotifier {
       if (data is Map<String, dynamic>) {
         if (data["detail"] != null) return data["detail"].toString();
 
-        // show first clean message
         for (final k in ["username", "image", "non_field_errors"]) {
           final v = data[k];
           if (v is List && v.isNotEmpty) return v.first.toString();

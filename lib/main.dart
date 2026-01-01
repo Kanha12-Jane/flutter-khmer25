@@ -46,17 +46,12 @@ void main() {
           create: (_) => CartProvider(),
           update: (_, auth, cart) {
             cart ??= CartProvider();
-
-            // 🔧 IMPORTANT: change this token field to match your AuthProvider
-            // If your AuthProvider token is named `access`, keep it.
-            final String? token = auth.access; // <-- change if needed
-
+            final String? token = auth.access; // <-- must match AuthProvider
             if (auth.isLoggedIn && token != null && token.isNotEmpty) {
               Future.microtask(() => cart!.fetchCart(accessToken: token));
             } else {
               cart!.clear();
             }
-
             return cart!;
           },
         ),
@@ -106,7 +101,7 @@ class _HomePageState extends State<HomePage> {
 
   void _setTab(int index) {
     setState(() => _selectedIndex = index);
-    Navigator.of(context).maybePop();
+    Navigator.of(context).maybePop(); // close drawer if open
   }
 
   void _openCategoryProducts(CategoryModel cat) {
@@ -116,6 +111,93 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
+  Drawer _buildDrawer() {
+    return Drawer(
+      child: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          DrawerHeader(
+            decoration: BoxDecoration(color: Theme.of(context).primaryColor),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  height: 48,
+                  child: Image.network(
+                    'https://khmer25.com/_nuxt/logo-mart.BD1f-q70.png',
+                    fit: BoxFit.contain,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Khmer25 Mart',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'សូមស្វាគមន៍មកកាន់ការទិញទំនិញ ក្នុងសម័យទំនើប',
+                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+
+          // 👉 Drawer items (linked with _selectedIndex)
+          ListTile(
+            leading: const Icon(Icons.home_outlined),
+            title: const Text('ទំព័រដើម'),
+            selected: _selectedIndex == tabHome,
+            selectedColor: Theme.of(context).primaryColor,
+            onTap: () => _setTab(tabHome),
+          ),
+          ListTile(
+            leading: const Icon(Icons.category_outlined),
+            title: const Text('ប្រភេទ'),
+            selected: _selectedIndex == tabCategory,
+            selectedColor: Theme.of(context).primaryColor,
+            onTap: () => _setTab(tabCategory),
+          ),
+          ListTile(
+            leading: const Icon(Icons.history_outlined),
+            title: const Text('ប្រវត្តិការកម្មង់'),
+            selected: _selectedIndex == tabHistory,
+            selectedColor: Theme.of(context).primaryColor,
+            onTap: () => _setTab(tabHistory),
+          ),
+          ListTile(
+            leading: const Icon(Icons.person_outline),
+            title: const Text('គណនី'),
+            selected: _selectedIndex == tabProfile,
+            selectedColor: Theme.of(context).primaryColor,
+            onTap: () => _setTab(tabProfile),
+          ),
+
+          const Divider(),
+
+          // Extra shortcuts (optional)
+          ListTile(
+            leading: const Icon(Icons.fiber_new_outlined),
+            title: const Text('ទំនិញថ្មីៗ'),
+            selected: _selectedIndex == tabNewProducts,
+            selectedColor: Theme.of(context).primaryColor,
+            onTap: () => _setTab(tabNewProducts),
+          ),
+          ListTile(
+            leading: const Icon(Icons.discount_outlined),
+            title: const Text('ទំនិញបញ្ចុះតម្លៃ'),
+            selected: _selectedIndex == tabDiscountProducts,
+            selectedColor: Theme.of(context).primaryColor,
+            onTap: () => _setTab(tabDiscountProducts),
+          ),
+        ],
+      ),
+    );
+  }
+
   AppBar _buildAppBar({required bool showBack}) {
     final cartQty = context.watch<CartProvider>().totalQty;
 
@@ -123,12 +205,17 @@ class _HomePageState extends State<HomePage> {
       elevation: 0,
       centerTitle: false,
       titleSpacing: 0,
+
+      // ✅ Important:
+      // - If showBack == true -> show back button
+      // - else -> null so Scaffold shows hamburger automatically (because drawer exists)
       leading: showBack
           ? IconButton(
               icon: const Icon(Icons.arrow_back),
               onPressed: () => _setTab(tabHome),
             )
           : null,
+
       title: Row(
         children: [
           const SizedBox(width: 8),
@@ -162,11 +249,6 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.watch<AuthProvider>();
-
-    // 🔧 IMPORTANT: change token field if your AuthProvider differs
-    final String? token = auth.access; // <-- this MUST match your AuthProvider
-
     final screens = <Widget>[
       HomeScreen(
         onOpenCategory: (cat) => _openCategoryProducts(cat),
@@ -175,10 +257,7 @@ class _HomePageState extends State<HomePage> {
       ),
       CategoryScreen(onOpenCategory: (cat) => _openCategoryProducts(cat)),
       const OrderHistoryScreen(),
-
-      // ✅ FIX: pass token to ProfileTab
       const ProfileTab(),
-
       ProductListScreen(
         type: ProductFilterType.newProducts,
         onBack: () => _setTab(tabHome),
@@ -195,6 +274,7 @@ class _HomePageState extends State<HomePage> {
     final bool isCategoryProducts = _selectedIndex == tabCategoryProducts;
 
     return Scaffold(
+      drawer: _buildDrawer(), // ✅ add drawer back
       appBar: _buildAppBar(showBack: isCategoryProducts),
       body: screens[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
