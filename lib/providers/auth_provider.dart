@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:project_flutter_khmer25/core/api_config.dart';
+import '../core/api_config.dart';
 
 class AuthProvider extends ChangeNotifier {
   bool isLoading = false;
@@ -10,10 +10,20 @@ class AuthProvider extends ChangeNotifier {
 
   String? access;
   String? refresh;
-
   Map<String, dynamic>? me;
 
-  bool get isLoggedIn => access != null && access!.isNotEmpty;
+  bool get isLoggedIn => (access ?? "").isNotEmpty;
+  String? get accessToken => access;
+
+  Map<String, String> _bearerHeaders(String token) => {
+    "Accept": "application/json",
+    "Authorization": "Bearer $token",
+  };
+
+  Map<String, String> _jsonHeaders() => {
+    "Accept": "application/json",
+    "Content-Type": "application/json",
+  };
 
   // =========================
   // Storage
@@ -40,12 +50,14 @@ class AuthProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString("access", newAccess);
     await prefs.setString("refresh", newRefresh);
+    notifyListeners();
   }
 
   Future<void> _saveAccessOnly(String newAccess) async {
     access = newAccess;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString("access", newAccess);
+    notifyListeners();
   }
 
   Future<void> _clearSession() async {
@@ -59,7 +71,8 @@ class AuthProvider extends ChangeNotifier {
   }
 
   // =========================
-  // Register
+  // ✅ Register (Djoser)
+  // POST /auth/users/
   // =========================
   Future<bool> register(
     String username,
@@ -74,16 +87,19 @@ class AuthProvider extends ChangeNotifier {
       final res = await http
           .post(
             Uri.parse("${ApiConfig.auth}/users/"),
-            headers: {"Content-Type": "application/json"},
+            headers: _jsonHeaders(),
             body: jsonEncode({
               "username": username,
               "password": password,
-              "re_password": rePassword,
+              "re_password": rePassword, // ✅ Djoser confirm key
             }),
           )
           .timeout(const Duration(seconds: 12));
 
-      if (res.statusCode == 201) return true;
+      if (res.statusCode == 201) {
+        error = null;
+        return true;
+      }
 
       error = _parseError(res);
       return false;
@@ -97,7 +113,8 @@ class AuthProvider extends ChangeNotifier {
   }
 
   // =========================
-  // Login
+  // ✅ Login (JWT Create)
+  // POST /auth/jwt/create/
   // =========================
   Future<bool> login(String username, String password) async {
     isLoading = true;
@@ -108,7 +125,7 @@ class AuthProvider extends ChangeNotifier {
       final res = await http
           .post(
             Uri.parse("${ApiConfig.auth}/jwt/create/"),
-            headers: {"Content-Type": "application/json"},
+            headers: _jsonHeaders(),
             body: jsonEncode({"username": username, "password": password}),
           )
           .timeout(const Duration(seconds: 12));
@@ -116,7 +133,6 @@ class AuthProvider extends ChangeNotifier {
       if (res.statusCode != 200) {
         await _clearSession();
         error = _parseError(res);
-        notifyListeners();
         return false;
       }
 
@@ -124,15 +140,15 @@ class AuthProvider extends ChangeNotifier {
       final newAccess = data["access"] as String?;
       final newRefresh = data["refresh"] as String?;
 
-      if (newAccess == null || newRefresh == null) {
+      if ((newAccess ?? "").isEmpty || (newRefresh ?? "").isEmpty) {
         error = "Login success but token missing!";
-        notifyListeners();
         return false;
       }
 
-      await _saveTokens(newAccess, newRefresh);
+      await _saveTokens(newAccess!, newRefresh!);
 
-      await getMe(); // load profile
+      // load djoser me (optional)
+      await getMe();
       return true;
     } catch (e) {
       error = "Network error: $e";
@@ -145,15 +161,16 @@ class AuthProvider extends ChangeNotifier {
 
   // =========================
   // Refresh Access Token
+  // POST /auth/jwt/refresh/
   // =========================
   Future<bool> refreshAccess() async {
-    if (refresh == null || refresh!.isEmpty) return false;
+    if ((refresh ?? "").isEmpty) return false;
 
     try {
       final res = await http
           .post(
             Uri.parse("${ApiConfig.auth}/jwt/refresh/"),
-            headers: {"Content-Type": "application/json"},
+            headers: _jsonHeaders(),
             body: jsonEncode({"refresh": refresh}),
           )
           .timeout(const Duration(seconds: 12));
@@ -162,10 +179,9 @@ class AuthProvider extends ChangeNotifier {
 
       final data = jsonDecode(res.body) as Map<String, dynamic>;
       final newAccess = data["access"] as String?;
+      if ((newAccess ?? "").isEmpty) return false;
 
-      if (newAccess == null || newAccess.isEmpty) return false;
-
-      await _saveAccessOnly(newAccess);
+      await _saveAccessOnly(newAccess!);
       return true;
     } catch (_) {
       return false;
@@ -173,23 +189,46 @@ class AuthProvider extends ChangeNotifier {
   }
 
   // =========================
-  // Me
+  // ✅ return valid access token
   // =========================
-  Map<String, String> _authHeaders() => {
-    "Content-Type": "application/json",
-    if (access != null && access!.isNotEmpty) "Authorization": "Bearer $access",
-  };
+  Future<String?> getValidAccessToken() async {
+    if (!isLoggedIn) return null;
 
+    // quick verify with Djoser me
+    try {
+      final res = await http.get(
+        Uri.parse("${ApiConfig.auth}/users/me/"),
+        headers: _bearerHeaders(access!),
+      );
+
+      if (res.statusCode == 200) return access;
+
+      if (res.statusCode == 401) {
+        final ok = await refreshAccess();
+        if (!ok) return null;
+        return access;
+      }
+
+      return access;
+    } catch (_) {
+      // if offline, still return it
+      return access;
+    }
+  }
+
+  // =========================
+  // GET Djoser me (optional)
+  // GET /auth/users/me/
+  // =========================
   Future<bool> getMe() async {
-    if (!isLoggedIn) return false;
+    final token = await getValidAccessToken();
+    if (token == null) return false;
 
     try {
-      final res = await http
-          .get(
-            Uri.parse("${ApiConfig.auth}/users/me/"),
-            headers: _authHeaders(),
-          )
-          .timeout(const Duration(seconds: 12));
+      final res = await http.get(
+        Uri.parse("${ApiConfig.auth}/users/me/"),
+        headers: _bearerHeaders(token),
+      );
 
       if (res.statusCode == 200) {
         me = jsonDecode(res.body) as Map<String, dynamic>;
@@ -198,23 +237,18 @@ class AuthProvider extends ChangeNotifier {
         return true;
       }
 
-      // ✅ Access expired -> try refresh -> retry once
       if (res.statusCode == 401) {
-        final ok = await refreshAccess();
-        if (ok) return await getMe();
-
-        await logout(); // refresh fail => logout
+        await logout();
         return false;
       }
 
-      me = null;
       error = _parseError(res);
-      notifyListeners();
       return false;
     } catch (e) {
       error = "GetMe error: $e";
-      notifyListeners();
       return false;
+    } finally {
+      notifyListeners();
     }
   }
 
@@ -236,13 +270,18 @@ class AuthProvider extends ChangeNotifier {
       if (data is Map<String, dynamic>) {
         if (data["detail"] != null) return data["detail"].toString();
 
-        return data.entries
-            .map((e) {
-              final v = e.value;
-              if (v is List) return "${e.key}: ${v.join(", ")}";
-              return "${e.key}: $v";
-            })
-            .join("\n");
+        for (final k in [
+          "username",
+          "password",
+          "re_password",
+          "non_field_errors",
+        ]) {
+          final v = data[k];
+          if (v is List && v.isNotEmpty) return v.first.toString();
+          if (v is String && v.isNotEmpty) return v;
+        }
+
+        return data.entries.map((e) => "${e.key}: ${e.value}").join("\n");
       }
 
       return res.body;

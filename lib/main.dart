@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:project_flutter_khmer25/screens/cart_screen.dart';
 import 'package:provider/provider.dart';
 
 import 'package:project_flutter_khmer25/models/category_model.dart';
 
 import 'package:project_flutter_khmer25/providers/auth_provider.dart';
+import 'package:project_flutter_khmer25/providers/profile_provider.dart';
 import 'package:project_flutter_khmer25/providers/banner_provider.dart';
 import 'package:project_flutter_khmer25/providers/category_provider.dart';
 import 'package:project_flutter_khmer25/providers/product_provider.dart';
 import 'package:project_flutter_khmer25/providers/category_product_provider.dart';
-import 'package:project_flutter_khmer25/providers/cart_provider.dart'; // ✅ ADD
+import 'package:project_flutter_khmer25/providers/cart_provider.dart';
 
 import 'package:project_flutter_khmer25/screens/home_screen.dart';
 import 'package:project_flutter_khmer25/screens/category_screen.dart';
@@ -19,45 +19,44 @@ import 'package:project_flutter_khmer25/screens/product_list_screen.dart';
 import 'package:project_flutter_khmer25/screens/category_product_screen.dart';
 
 import 'package:project_flutter_khmer25/screens/favorite_screen.dart';
-import 'package:project_flutter_khmer25/screens/order_screen.dart';
+import 'package:project_flutter_khmer25/screens/cart_screen.dart';
 
 void main() {
   runApp(
     MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => ProfileProvider()),
         ChangeNotifierProvider(create: (_) => BannerProvider()..loadBanners()),
-
-        // ✅ Category load (no token needed)
         ChangeNotifierProvider(
           create: (_) => CategoryProvider()..loadCategories(),
         ),
-
         ChangeNotifierProvider(
           create: (_) => ProductProvider()..fetchProducts(),
         ),
 
-        // ✅ Auth (Djoser JWT)
+        // ✅ Auth
         ChangeNotifierProvider(
           create: (_) => AuthProvider()..loadFromStorageAndMe(),
         ),
 
         ChangeNotifierProvider(create: (_) => CategoryProductProvider()),
 
-        // ✅ CART: depends on AuthProvider (need access token)
-        // We create CartProvider once, then we call fetchCart when logged in.
+        // ✅ Cart depends on auth token
         ChangeNotifierProxyProvider<AuthProvider, CartProvider>(
           create: (_) => CartProvider(),
           update: (_, auth, cart) {
-            // keep same instance
             cart ??= CartProvider();
 
-            // ✅ auto load cart after login
-            if (auth.isLoggedIn) {
-              // don't await inside update; just fire and forget
-              Future.microtask(() => cart!.fetchCart(accessToken: auth.access));
+            // 🔧 IMPORTANT: change this token field to match your AuthProvider
+            // If your AuthProvider token is named `access`, keep it.
+            final String? token = auth.access; // <-- change if needed
+
+            if (auth.isLoggedIn && token != null && token.isNotEmpty) {
+              Future.microtask(() => cart!.fetchCart(accessToken: token));
             } else {
               cart!.clear();
             }
+
             return cart!;
           },
         ),
@@ -118,7 +117,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   AppBar _buildAppBar({required bool showBack}) {
-    final cartQty = context.watch<CartProvider>().totalQty; // ✅ badge qty
+    final cartQty = context.watch<CartProvider>().totalQty;
 
     return AppBar(
       elevation: 0,
@@ -150,8 +149,6 @@ class _HomePageState extends State<HomePage> {
           ),
           icon: const Icon(Icons.favorite_border),
         ),
-
-        // ✅ Cart Icon + Badge
         IconButton(
           onPressed: () => Navigator.push(
             context,
@@ -165,6 +162,11 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+
+    // 🔧 IMPORTANT: change token field if your AuthProvider differs
+    final String? token = auth.access; // <-- this MUST match your AuthProvider
+
     final screens = <Widget>[
       HomeScreen(
         onOpenCategory: (cat) => _openCategoryProducts(cat),
@@ -173,7 +175,10 @@ class _HomePageState extends State<HomePage> {
       ),
       CategoryScreen(onOpenCategory: (cat) => _openCategoryProducts(cat)),
       const OrderHistoryScreen(),
+
+      // ✅ FIX: pass token to ProfileTab
       const ProfileTab(),
+
       ProductListScreen(
         type: ProductFilterType.newProducts,
         onBack: () => _setTab(tabHome),

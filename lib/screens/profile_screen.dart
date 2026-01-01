@@ -1,347 +1,205 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:project_flutter_khmer25/providers/auth_provider.dart';
-import 'package:project_flutter_khmer25/screens/login_screen.dart';
 
-class ProfileTab extends StatelessWidget {
+import '../providers/auth_provider.dart';
+import '../providers/profile_provider.dart';
+import 'edit_profile_screen.dart';
+import 'login_screen.dart';
+
+class ProfileTab extends StatefulWidget {
   const ProfileTab({super.key});
+
+  @override
+  State<ProfileTab> createState() => _ProfileTabState();
+}
+
+class _ProfileTabState extends State<ProfileTab> {
+  bool _loaded = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    final auth = context.watch<AuthProvider>();
+
+    // ✅ when logged in first time, load profile once
+    if (auth.isLoggedIn && !_loaded) {
+      _loaded = true;
+      Future.microtask(() => context.read<ProfileProvider>().loadMe(context));
+    }
+
+    // ✅ if logout then allow load again next login
+    if (!auth.isLoggedIn) {
+      _loaded = false;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
+    final profile = context.watch<ProfileProvider>();
 
-    const String profileImage =
+    const fallbackImage =
         "https://img.freepik.com/premium-vector/vector-flat-illustration-grayscale-avatar-user-profile-person-icon-profile-picture-business-profile-woman-suitable-social-media-profiles-icons-screensavers-as-templatex9_719432-1351.jpg";
 
-    final String userName = auth.isLoggedIn
-        ? (auth.me == null ? "Loading..." : (auth.me?["username"] ?? "User"))
+    final loggedIn = auth.isLoggedIn;
+    final me = profile.me;
+
+    final userName = loggedIn
+        ? (me == null ? "Loading..." : (me["username"] ?? "User").toString())
         : "Guest";
 
-    const String userLocation = "Phnom Penh, Cambodia";
+    final email = loggedIn
+        ? (me == null ? "" : (me["email"] ?? "").toString())
+        : "";
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-      child: Column(
+    final img = (profile.imageUrl != null && profile.imageUrl!.isNotEmpty)
+        ? profile.imageUrl!
+        : fallbackImage;
+
+    return RefreshIndicator(
+      onRefresh: () async => profile.loadMe(context),
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
         children: [
-          _headerCard(profileImage, userName, userLocation, auth.isLoggedIn),
-          const SizedBox(height: 16),
-
-          if (!auth.isLoggedIn) ...[
-            _sectionTitle("Welcome"),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                // Expanded(
-                //   child: _actionButton(
-                //     context,
-                //     icon: Icons.person_add_alt_1,
-                //     title: "Register",
-                //     subtitle: "Create account",
-                //     onTap: () async {
-                //       await Navigator.push(
-                //         context,
-                //         MaterialPageRoute(
-                //           builder: (_) => const RegisterScreen(),
-                //         ),
-                //       );
-                //     },
-                //   ),
-                // ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _actionButton(
-                    context,
-                    icon: Icons.login,
-                    title: "ចូលកម្មវិធី",
-                    subtitle: "សូមចូលកម្មវិធីដើម្បីបន្ត",
-                    onTap: () async {
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const LoginScreen()),
-                      );
-                    },
-                  ),
+          // ✅ White card + avatar (old design)
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(.06),
+                  blurRadius: 18,
+                  offset: const Offset(0, 10),
                 ),
               ],
             ),
-          ],
-
-          if (auth.isLoggedIn) ...[
-            _sectionTitle("Account"),
-            const SizedBox(height: 10),
-            _menuTile(
-              icon: Icons.edit,
-              title: "Edit profile",
-              subtitle: "Update info",
-              onTap: () {},
-            ),
-            _menuTile(
-              icon: Icons.history,
-              title: "My Orders",
-              subtitle: "See your orders",
-              onTap: () {},
-            ),
-            _menuTile(
-              icon: Icons.location_city,
-              title: "Addresses",
-              subtitle: "Delivery addresses",
-              onTap: () {},
-            ),
-            _menuTile(
-              icon: Icons.settings,
-              title: "Settings",
-              subtitle: "App preferences",
-              onTap: () {},
-            ),
-            const SizedBox(height: 14),
-
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: OutlinedButton.icon(
-                onPressed: () async {
-                  final ok = await showDialog<bool>(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: const Text("Logout"),
-                      content: const Text("Are you sure you want to logout?"),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx, false),
-                          child: const Text("Cancel"),
-                        ),
-                        ElevatedButton(
-                          onPressed: () => Navigator.pop(ctx, true),
-                          child: const Text("Logout"),
-                        ),
-                      ],
-                    ),
-                  );
-
-                  if (ok != true) return;
-
-                  await context.read<AuthProvider>().logout();
-                  if (!context.mounted) return;
-
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(const SnackBar(content: Text("Logged out ✅")));
-                },
-                icon: const Icon(Icons.logout, color: Colors.red),
-                label: const Text(
-                  "Logout",
-                  style: TextStyle(
-                    color: Colors.red,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  // --- helpers (same as your code) ---
-  static Widget _headerCard(
-    String img,
-    String name,
-    String location,
-    bool loggedIn,
-  ) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        gradient: LinearGradient(
-          colors: [
-            const Color(0xFF2ECC71),
-            const Color(0xFF2ECC71).withOpacity(.75),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(radius: 38, backgroundImage: NetworkImage(img)),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Text(
-                  name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.white,
+                ClipOval(
+                  child: Image.network(
+                    "$img?v=${DateTime.now().millisecondsSinceEpoch}",
+                    width: 70,
+                    height: 70,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) =>
+                        const Icon(Icons.person, size: 40),
                   ),
                 ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.location_on,
-                      size: 16,
-                      color: Colors.white70,
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        location,
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        userName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          color: Colors.white70,
-                          fontWeight: FontWeight.w600,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  loggedIn ? "Status: Logged in ✅" : "Status: Not logged in ❌",
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 12,
+                      if (email.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          email,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black54,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 8),
+                      Text(
+                        profile.isLoading
+                            ? "Loading..."
+                            : (loggedIn ? "Logged in ✅" : "Guest"),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: loggedIn ? Colors.green : Colors.grey,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
           ),
-        ],
-      ),
-    );
-  }
 
-  static Widget _sectionTitle(String title) => Row(
-    children: [
-      Text(
-        title,
-        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
-      ),
-    ],
-  );
+          const SizedBox(height: 16),
 
-  static Widget _actionButton(
-    BuildContext context, {
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(18),
-      onTap: onTap,
-      child: Ink(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(.05),
-              blurRadius: 16,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
+          // ✅ error box
+          if (profile.error != null) ...[
             Container(
-              width: 44,
-              height: 44,
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: const Color(0xFF2ECC71).withOpacity(.12),
-                borderRadius: BorderRadius.circular(14),
+                color: Colors.red.withOpacity(.08),
+                borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(icon, color: const Color(0xFF2ECC71)),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      color: Colors.black54,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
+              child: Text(
+                profile.error!,
+                style: const TextStyle(color: Colors.red),
               ),
             ),
-            const Icon(Icons.chevron_right, color: Colors.black38),
+            const SizedBox(height: 12),
           ],
-        ),
-      ),
-    );
-  }
 
-  static Widget _menuTile({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onTap,
-        child: Ink(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(.05),
-                blurRadius: 14,
-                offset: const Offset(0, 7),
-              ),
-            ],
-          ),
-          child: ListTile(
-            leading: Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: const Color(0xFF2ECC71).withOpacity(.12),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Icon(icon, color: const Color(0xFF2ECC71)),
+          // ✅ when not logged in => show login button
+          if (!loggedIn)
+            ElevatedButton.icon(
+              icon: const Icon(Icons.login),
+              label: const Text("ចូលកម្មវិធី"),
+              onPressed: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                );
+              },
             ),
-            title: Text(
-              title,
-              style: const TextStyle(fontWeight: FontWeight.w900),
+
+          // ✅ when logged in => show options
+          if (loggedIn) ...[
+            ListTile(
+              leading: const Icon(Icons.edit),
+              title: const Text("Edit profile"),
+              subtitle: const Text("Update username & photo"),
+              onTap: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const EditProfileScreen()),
+                );
+                // refresh when return
+                await profile.loadMe(context);
+              },
             ),
-            subtitle: Text(
-              subtitle,
-              style: const TextStyle(
-                color: Colors.black54,
-                fontWeight: FontWeight.w600,
+            ListTile(
+              leading: const Icon(Icons.refresh),
+              title: const Text("Reload profile"),
+              onTap: () => profile.loadMe(context),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.logout, color: Colors.red),
+              label: const Text(
+                "Logout",
+                style: TextStyle(
+                  color: Colors.red,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
+              onPressed: () async {
+                await context.read<AuthProvider>().logout();
+                context.read<ProfileProvider>().clear();
+              },
             ),
-            trailing: const Icon(Icons.chevron_right, color: Colors.black38),
-          ),
-        ),
+          ],
+        ],
       ),
     );
   }

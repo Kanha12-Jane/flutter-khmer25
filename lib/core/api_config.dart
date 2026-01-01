@@ -1,5 +1,5 @@
 class ApiConfig {
-  static const host = "http://192.168.0.109:8000"; // ✅ ONE IP
+  static const host = "http://192.168.43.38:8000"; // ✅ ONE IP
   static const api = "$host/api";
   static const auth = "$host/auth";
   static const String categories = "$api/categories/";
