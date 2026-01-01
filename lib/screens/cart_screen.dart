@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+// ✅ keep InAppWebView for Mobile only
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import 'package:project_flutter_khmer25/providers/auth_provider.dart';
@@ -44,6 +47,35 @@ class _CartScreenState extends State<CartScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => const _ShippingBottomSheet(),
+    );
+  }
+
+  Future<void> _openPayWay({required String url, required String title}) async {
+    // ✅ WEB: open new tab (external) -> fixes "embedded" error
+    if (kIsWeb) {
+      final ok = await launchUrl(
+        Uri.parse(url),
+        mode: LaunchMode.externalApplication, // opens new tab on web
+      );
+      if (!ok && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("បើកទំព័រទូទាត់មិនបាន 😅")),
+        );
+      }
+      return;
+    }
+
+    // ✅ MOBILE: you can choose external browser OR in-app webview
+    // Option A (recommended): external browser
+    // await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+
+    // Option B: in-app webview (your current UI)
+    if (!mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PayWayCheckoutPage(payUrl: url, title: title),
+      ),
     );
   }
 
@@ -157,11 +189,10 @@ class _CartScreenState extends State<CartScreen> {
                           ),
                         ),
                         onPressed: () async {
-                          // 1) ask shipping info (address + phone)
+                          // 1) ask shipping info
                           final info = await _openShippingSheet(context);
-                          if (info == null) return; // user canceled
+                          if (info == null) return;
 
-                          // (optional) show quick confirm
                           if (!mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
@@ -172,20 +203,15 @@ class _CartScreenState extends State<CartScreen> {
                             ),
                           );
 
-                          // 2) open PayWay hosted QR page
+                          // 2) build PayWay URL
                           final payUrl = _buildPayWayLink(
                             amount: cartProv.totalPrice,
                           );
 
-                          if (!mounted) return;
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => PayWayCheckoutPage(
-                                payUrl: payUrl,
-                                title: "ទូទាត់តាម ABA KHQR",
-                              ),
-                            ),
+                          // ✅ FIX HERE
+                          await _openPayWay(
+                            url: payUrl,
+                            title: "ទូទាត់តាម ABA KHQR",
                           );
                         },
                         child: const Text(
@@ -247,7 +273,6 @@ class _ShippingBottomSheetState extends State<_ShippingBottomSheet> {
   String? _validatePhone(String? v) {
     final s = (v ?? "").trim();
     if (s.isEmpty) return "សូមបញ្ចូលលេខទូរស័ព្ទ";
-    // simple KH phone check (8-10 digits), allow +855 and spaces
     final digits = s.replaceAll(RegExp(r'[^0-9]'), '');
     if (digits.length < 8 || digits.length > 12) {
       return "លេខទូរស័ព្ទមិនត្រឹមត្រូវ";
@@ -267,7 +292,6 @@ class _ShippingBottomSheetState extends State<_ShippingBottomSheet> {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _saving = true);
-    // simulate save (you can call backend here)
     await Future.delayed(const Duration(milliseconds: 350));
     if (!mounted) return;
 
@@ -291,155 +315,142 @@ class _ShippingBottomSheetState extends State<_ShippingBottomSheet> {
       child: Padding(
         padding: EdgeInsets.only(bottom: bottom),
         child: Container(
-          decoration: const BoxDecoration(color: Colors.transparent),
-          child: Container(
-            margin: const EdgeInsets.all(12),
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(22),
-              boxShadow: [
-                BoxShadow(
-                  blurRadius: 24,
-                  offset: const Offset(0, 10),
-                  color: Colors.black.withOpacity(0.10),
+          margin: const EdgeInsets.all(12),
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(22),
+            boxShadow: [
+              BoxShadow(
+                blurRadius: 24,
+                offset: const Offset(0, 10),
+                color: Colors.black.withOpacity(0.10),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 44,
+                height: 5,
+                margin: const EdgeInsets.only(bottom: 10),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(99),
                 ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // handle
-                Container(
-                  width: 44,
-                  height: 5,
-                  margin: const EdgeInsets.only(bottom: 10),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(99),
+              ),
+              Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.primary.withOpacity(0.10),
+                    ),
+                    child: Icon(
+                      Icons.local_shipping_outlined,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                   ),
-                ),
-
-                Row(
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(16),
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.primary.withOpacity(0.10),
-                      ),
-                      child: Icon(
-                        Icons.local_shipping_outlined,
-                        color: Theme.of(context).colorScheme.primary,
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      "ព័ត៌មានដឹកជញ្ជូន",
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 18,
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    const Expanded(
-                      child: Text(
-                        "ព័ត៌មានដឹកជញ្ជូន",
-                        style: TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 18,
+                  ),
+                  IconButton(
+                    onPressed: _saving ? null : () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Form(
+                key: _formKey,
+                child: Column(
+                  children: [
+                    _PrettyField(
+                      label: "លេខទូរស័ព្ទ",
+                      hint: "ឧ: 012 345 678",
+                      controller: _phoneCtrl,
+                      keyboardType: TextInputType.phone,
+                      prefixIcon: Icons.phone_iphone,
+                      validator: _validatePhone,
+                    ),
+                    const SizedBox(height: 10),
+                    _PrettyField(
+                      label: "អាសយដ្ឋាន",
+                      hint: "ភូមិ/ឃុំ/សង្កាត់/ខណ្ឌ/ខេត្ត…",
+                      controller: _addressCtrl,
+                      keyboardType: TextInputType.streetAddress,
+                      maxLines: 2,
+                      prefixIcon: Icons.location_on_outlined,
+                      validator: _validateAddress,
+                    ),
+                    const SizedBox(height: 10),
+                    _PrettyField(
+                      label: "ចំណាំ (ជម្រើស)",
+                      hint: "ឧ: ទុកនៅមុខផ្ទះ / ទូរស័ព្ទមុនមក…",
+                      controller: _noteCtrl,
+                      keyboardType: TextInputType.text,
+                      maxLines: 2,
+                      prefixIcon: Icons.notes_outlined,
+                      validator: (_) => null,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
                         ),
                       ),
-                    ),
-                    IconButton(
                       onPressed: _saving ? null : () => Navigator.pop(context),
-                      icon: const Icon(Icons.close),
+                      child: const Text(
+                        "បោះបង់",
+                        style: TextStyle(fontWeight: FontWeight.w900),
+                      ),
                     ),
-                  ],
-                ),
-
-                const SizedBox(height: 8),
-
-                Form(
-                  key: _formKey,
-                  child: Column(
-                    children: [
-                      _PrettyField(
-                        label: "លេខទូរស័ព្ទ",
-                        hint: "ឧ: 012 345 678",
-                        controller: _phoneCtrl,
-                        keyboardType: TextInputType.phone,
-                        prefixIcon: Icons.phone_iphone,
-                        validator: _validatePhone,
-                      ),
-                      const SizedBox(height: 10),
-                      _PrettyField(
-                        label: "អាសយដ្ឋាន",
-                        hint: "ភូមិ/ឃុំ/សង្កាត់/ខណ្ឌ/ខេត្ត…",
-                        controller: _addressCtrl,
-                        keyboardType: TextInputType.streetAddress,
-                        maxLines: 2,
-                        prefixIcon: Icons.location_on_outlined,
-                        validator: _validateAddress,
-                      ),
-                      const SizedBox(height: 10),
-                      _PrettyField(
-                        label: "ចំណាំ (ជម្រើស)",
-                        hint: "ឧ: ទុកនៅមុខផ្ទះ / ទូរស័ព្ទមុនមក…",
-                        controller: _noteCtrl,
-                        keyboardType: TextInputType.text,
-                        maxLines: 2,
-                        prefixIcon: Icons.notes_outlined,
-                        validator: (_) => null,
-                      ),
-                    ],
                   ),
-                ),
-
-                const SizedBox(height: 12),
-
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        onPressed: _saving
-                            ? null
-                            : () => Navigator.pop(context),
-                        child: const Text(
-                          "បោះបង់",
-                          style: TextStyle(fontWeight: FontWeight.w900),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
                         ),
                       ),
+                      onPressed: _saving ? null : _submit,
+                      child: _saving
+                          ? const SizedBox(
+                              height: 18,
+                              width: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text(
+                              "បន្តទៅទូទាត់",
+                              style: TextStyle(fontWeight: FontWeight.w900),
+                            ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        onPressed: _saving ? null : _submit,
-                        child: _saving
-                            ? const SizedBox(
-                                height: 18,
-                                width: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Text(
-                                "បន្តទៅទូទាត់",
-                                style: TextStyle(fontWeight: FontWeight.w900),
-                              ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
@@ -510,8 +521,8 @@ class _PrettyField extends StatelessWidget {
                   keyboardType: keyboardType,
                   maxLines: maxLines,
                   validator: validator,
-                  decoration: InputDecoration(
-                    hintText: hint,
+                  decoration: const InputDecoration(
+                    hintText: "",
                     isDense: true,
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.zero,
@@ -526,7 +537,7 @@ class _PrettyField extends StatelessWidget {
   }
 }
 
-/* ===================== PAYWAY WEBVIEW ===================== */
+/* ===================== PAYWAY WEBVIEW (MOBILE ONLY) ===================== */
 
 class PayWayCheckoutPage extends StatefulWidget {
   final String payUrl;
@@ -545,15 +556,6 @@ class PayWayCheckoutPage extends StatefulWidget {
 class _PayWayCheckoutPageState extends State<PayWayCheckoutPage> {
   bool _loading = true;
 
-  bool _isExternalScheme(Uri u) {
-    final s = u.scheme.toLowerCase();
-    return s == 'intent' ||
-        s == 'aba' ||
-        s == 'market' ||
-        s == 'tel' ||
-        s == 'mailto';
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -563,24 +565,6 @@ class _PayWayCheckoutPageState extends State<PayWayCheckoutPage> {
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
         elevation: 0,
-        actions: [
-          IconButton(
-            tooltip: "Reload",
-            onPressed: () async {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => PayWayCheckoutPage(
-                    payUrl: widget.payUrl,
-                    title: widget.title,
-                  ),
-                ),
-              );
-            },
-            icon: const Icon(Icons.refresh),
-          ),
-        ],
       ),
       body: Stack(
         children: [
@@ -588,7 +572,6 @@ class _PayWayCheckoutPageState extends State<PayWayCheckoutPage> {
             initialUrlRequest: URLRequest(url: WebUri(widget.payUrl)),
             initialSettings: InAppWebViewSettings(
               javaScriptEnabled: true,
-              transparentBackground: false,
               supportZoom: false,
               useShouldOverrideUrlLoading: true,
             ),
@@ -597,21 +580,6 @@ class _PayWayCheckoutPageState extends State<PayWayCheckoutPage> {
             },
             onLoadStop: (_, __) {
               if (mounted) setState(() => _loading = false);
-            },
-            shouldOverrideUrlLoading: (controller, navAction) async {
-              final uri = navAction.request.url?.uriValue;
-              if (uri == null) return NavigationActionPolicy.ALLOW;
-
-              if (_isExternalScheme(uri)) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text("Staying in app ✅ (ABA app link blocked)"),
-                    duration: Duration(seconds: 1),
-                  ),
-                );
-                return NavigationActionPolicy.CANCEL;
-              }
-              return NavigationActionPolicy.ALLOW;
             },
             onReceivedError: (_, __, ___) {
               if (mounted) setState(() => _loading = false);
