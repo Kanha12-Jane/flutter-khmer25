@@ -10,6 +10,7 @@ import 'package:project_flutter_khmer25/providers/category_provider.dart';
 import 'package:project_flutter_khmer25/providers/product_provider.dart';
 import 'package:project_flutter_khmer25/providers/category_product_provider.dart';
 import 'package:project_flutter_khmer25/providers/cart_provider.dart';
+import 'package:project_flutter_khmer25/providers/order_provider.dart'; // ✅ NEW
 
 import 'package:project_flutter_khmer25/screens/home_screen.dart';
 import 'package:project_flutter_khmer25/screens/category_screen.dart';
@@ -46,13 +47,32 @@ void main() {
           create: (_) => CartProvider(),
           update: (_, auth, cart) {
             cart ??= CartProvider();
-            final String? token = auth.access; // <-- must match AuthProvider
+            final String? token = auth.access; // must match AuthProvider
             if (auth.isLoggedIn && token != null && token.isNotEmpty) {
               Future.microtask(() => cart!.fetchCart(accessToken: token));
             } else {
               cart!.clear();
             }
             return cart!;
+          },
+        ),
+
+        // ✅ NEW: OrderProvider depends on auth token (same style)
+        ChangeNotifierProxyProvider<AuthProvider, OrderProvider>(
+          create: (_) => OrderProvider(),
+          update: (_, auth, orderProv) {
+            orderProv ??= OrderProvider();
+            final String? token = auth.access;
+
+            if (auth.isLoggedIn && token != null && token.isNotEmpty) {
+              // Optional: auto load orders when login
+              Future.microtask(
+                () => orderProv!.fetchMyOrders(accessToken: token),
+              );
+            } else {
+              orderProv!.clear();
+            }
+            return orderProv!;
           },
         ),
       ],
@@ -128,7 +148,6 @@ class _HomePageState extends State<HomePage> {
                     fit: BoxFit.contain,
                   ),
                 ),
-
                 const SizedBox(height: 12),
                 const Text(
                   'Khmer25 Mart',
@@ -147,7 +166,7 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
 
-          // 👉 Drawer items (linked with _selectedIndex)
+          // 👉 Drawer items
           ListTile(
             leading: const Icon(Icons.home_outlined),
             title: const Text('ទំព័រដើម'),
@@ -176,10 +195,7 @@ class _HomePageState extends State<HomePage> {
             selectedColor: Theme.of(context).primaryColor,
             onTap: () => _setTab(tabProfile),
           ),
-
           const Divider(),
-
-          // Extra shortcuts (optional)
           ListTile(
             leading: const Icon(Icons.fiber_new_outlined),
             title: const Text('ទំនិញថ្មីៗ'),
@@ -206,17 +222,12 @@ class _HomePageState extends State<HomePage> {
       elevation: 0,
       centerTitle: false,
       titleSpacing: 0,
-
-      // ✅ Important:
-      // - If showBack == true -> show back button
-      // - else -> null so Scaffold shows hamburger automatically (because drawer exists)
       leading: showBack
           ? IconButton(
               icon: const Icon(Icons.arrow_back),
               onPressed: () => _setTab(tabHome),
             )
           : null,
-
       title: Row(
         children: [
           const SizedBox(width: 8),
@@ -227,13 +238,13 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
       actions: [
-        IconButton(
-          onPressed: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const FavoriteScreen()),
-          ),
-          icon: const Icon(Icons.favorite_border),
-        ),
+        // IconButton(
+        //   onPressed: () => Navigator.push(
+        //     context,
+        //     MaterialPageRoute(builder: (_) => const FavoriteScreen()),
+        //   ),
+        //   icon: const Icon(Icons.favorite_border),
+        // ),
         IconButton(
           onPressed: () => Navigator.push(
             context,
@@ -272,7 +283,7 @@ class _HomePageState extends State<HomePage> {
     final bool isCategoryProducts = _selectedIndex == tabCategoryProducts;
 
     return Scaffold(
-      drawer: _buildDrawer(), // ✅ add drawer back
+      drawer: _buildDrawer(),
       appBar: _buildAppBar(showBack: isCategoryProducts),
       body: screens[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(

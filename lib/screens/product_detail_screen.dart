@@ -5,7 +5,7 @@ import 'package:project_flutter_khmer25/components/home/home_list_product_horizo
 import 'package:project_flutter_khmer25/models/product_model.dart';
 import 'package:project_flutter_khmer25/providers/product_provider.dart';
 
-// ✅ add these (must exist in your project)
+// Auth + Cart
 import 'package:project_flutter_khmer25/providers/auth_provider.dart';
 import 'package:project_flutter_khmer25/providers/cart_provider.dart';
 
@@ -26,10 +26,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (!_inited) {
-      _inited = true;
+    if (_inited) return;
+    _inited = true;
+
+    Future.microtask(() {
       context.read<ProductProvider>().fetchProductDetail(widget.productId);
-    }
+    });
   }
 
   Future<void> _handleAddToCart(Product p) async {
@@ -37,6 +39,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     final cartProv = context.read<CartProvider>();
 
     if (!auth.isLoggedIn) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("សូម Login មុន ដើម្បីបន្ថែមចូលកន្ត្រក 🙏"),
@@ -47,7 +50,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     }
 
     if (_adding) return;
-
     setState(() => _adding = true);
 
     try {
@@ -93,18 +95,34 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     final p = prov.detailProduct;
 
     if (prov.isLoadingDetail) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(
+        backgroundColor: Color(0xFFF7F7FB),
+        body: Center(child: CircularProgressIndicator()),
+      );
     }
 
     if (prov.detailError != null) {
       return Scaffold(
-        appBar: AppBar(),
-        body: Center(child: Text(prov.detailError!)),
+        backgroundColor: const Color(0xFFF7F7FB),
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+          elevation: 0,
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Text(prov.detailError!, textAlign: TextAlign.center),
+          ),
+        ),
       );
     }
 
     if (p == null) {
-      return const Scaffold(body: Center(child: Text("No product")));
+      return const Scaffold(
+        backgroundColor: Color(0xFFF7F7FB),
+        body: Center(child: Text("No product")),
+      );
     }
 
     final hasDiscount = p.discountPercent > 0;
@@ -115,7 +133,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     final relatedProducts = p.relatedProducts.take(10).toList();
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFF7F7FB),
       appBar: AppBar(
         elevation: 0.2,
         backgroundColor: Colors.white,
@@ -126,11 +144,16 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           p.name,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontWeight: FontWeight.w700),
+          style: const TextStyle(fontWeight: FontWeight.w800),
         ),
+        // ✅ removed favorite button
         actions: [
-          IconButton(onPressed: () {}, icon: const Icon(Icons.share_outlined)),
-          IconButton(onPressed: () {}, icon: const Icon(Icons.favorite_border)),
+          IconButton(
+            onPressed: () {
+              // TODO: share (optional)
+            },
+            icon: const Icon(Icons.share_outlined),
+          ),
           const SizedBox(width: 4),
         ],
       ),
@@ -178,7 +201,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                           p.isInStock
                               ? "បន្ថែមចូលកន្ត្រក • ${_fmt(total)}៛"
                               : "អស់ស្តុក",
-                          style: const TextStyle(fontWeight: FontWeight.w800),
+                          style: const TextStyle(fontWeight: FontWeight.w900),
                         ),
                 ),
               ),
@@ -217,6 +240,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       left: 10,
                       child: _DiscountPill(percent: p.discountPercent),
                     ),
+                  Positioned(
+                    top: 10,
+                    right: 10,
+                    child: _StockPill(inStock: p.isInStock),
+                  ),
                 ],
               ),
             ),
@@ -225,65 +253,100 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           const SizedBox(height: 12),
 
           // ================= TITLE + UNIT =================
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Text(
-                  p.name,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w900,
-                    height: 1.2,
-                  ),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              color: Colors.white,
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        p.name,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                          height: 1.2,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    if (p.unit != null && p.unit!.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: Colors.grey.shade200),
+                        ),
+                        child: Text(
+                          p.unit!,
+                          style: const TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                  ],
                 ),
-              ),
-              const SizedBox(width: 10),
-              if (p.unit != null && p.unit!.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: Colors.grey.shade200),
-                  ),
-                  child: Text(
-                    p.unit!,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                ),
-            ],
-          ),
 
-          const SizedBox(height: 10),
+                const SizedBox(height: 10),
 
-          // ================= PRICE =================
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                "${_fmt(finalPrice)}៛",
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w900,
-                  color: Theme.of(context).colorScheme.primary,
+                // ================= PRICE =================
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      "${_fmt(finalPrice)}៛",
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    if (hasDiscount)
+                      Text(
+                        "${_fmt(oldPrice)}៛",
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey.shade600,
+                          decoration: TextDecoration.lineThrough,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                  ],
                 ),
-              ),
-              const SizedBox(width: 10),
-              if (hasDiscount)
-                Text(
-                  "${_fmt(oldPrice)}៛",
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey.shade600,
-                    decoration: TextDecoration.lineThrough,
-                    fontWeight: FontWeight.w700,
-                  ),
+
+                const SizedBox(height: 12),
+
+                Row(
+                  children: const [
+                    Expanded(
+                      child: _InfoTile(
+                        icon: Icons.local_shipping_outlined,
+                        title: "ដឹកជញ្ជូន",
+                        subtitle: "ក្នុងថ្ងៃ / 1–2ថ្ងៃ",
+                      ),
+                    ),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: _InfoTile(
+                        icon: Icons.verified_outlined,
+                        title: "ទំនុកចិត្ត",
+                        subtitle: "ផលិតផលគុណភាព",
+                      ),
+                    ),
+                  ],
                 ),
-            ],
+              ],
+            ),
           ),
 
           const SizedBox(height: 14),
@@ -291,37 +354,23 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           // ================= DESCRIPTION =================
           const _SectionTitle(title: "ពិពណ៌នា"),
           const SizedBox(height: 8),
-          Text(
-            (p.description?.isNotEmpty == true)
-                ? p.description!
-                : "មិនទាន់មានពិពណ៌នា។",
-            style: TextStyle(
-              color: Colors.grey.shade800,
-              height: 1.55,
-              fontSize: 14.5,
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              color: Colors.white,
+              border: Border.all(color: Colors.grey.shade200),
             ),
-          ),
-
-          const SizedBox(height: 18),
-
-          Row(
-            children: const [
-              Expanded(
-                child: _InfoTile(
-                  icon: Icons.local_shipping_outlined,
-                  title: "ដឹកជញ្ជូន",
-                  subtitle: "ក្នុងថ្ងៃ / 1–2ថ្ងៃ",
-                ),
+            child: Text(
+              (p.description?.isNotEmpty == true)
+                  ? p.description!
+                  : "មិនទាន់មានពិពណ៌នា។",
+              style: TextStyle(
+                color: Colors.grey.shade800,
+                height: 1.55,
+                fontSize: 14.5,
               ),
-              SizedBox(width: 10),
-              Expanded(
-                child: _InfoTile(
-                  icon: Icons.verified_outlined,
-                  title: "ទំនុកចិត្ត",
-                  subtitle: "ផលិតផលគុណភាព",
-                ),
-              ),
-            ],
+            ),
           ),
 
           const SizedBox(height: 18),
@@ -334,6 +383,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(14),
+                color: Colors.white,
                 border: Border.all(color: Colors.grey.shade200),
               ),
               child: Text(
@@ -369,6 +419,36 @@ class _DiscountPill extends StatelessWidget {
           color: Colors.white,
           fontWeight: FontWeight.w900,
           fontSize: 12,
+        ),
+      ),
+    );
+  }
+}
+
+class _StockPill extends StatelessWidget {
+  final bool inStock;
+  const _StockPill({required this.inStock});
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = inStock ? const Color(0xFFE9FFF6) : const Color(0xFFFFEDED);
+    final fg = inStock ? const Color(0xFF0B7A4B) : const Color(0xFFB42318);
+    final text = inStock ? "IN STOCK" : "OUT";
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: fg.withOpacity(0.18)),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: fg,
+          fontWeight: FontWeight.w900,
+          fontSize: 12,
+          letterSpacing: 0.3,
         ),
       ),
     );
@@ -452,6 +532,7 @@ class _QtySelector extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: Colors.grey.shade300),
+        color: Colors.white,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

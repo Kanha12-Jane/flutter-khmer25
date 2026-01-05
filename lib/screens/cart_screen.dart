@@ -1,14 +1,19 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:typed_data';
+
+import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
 import 'package:flutter/material.dart';
+import 'package:project_flutter_khmer25/screens/payment_flow_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:file_picker/file_picker.dart';
 
 // ✅ keep InAppWebView for Mobile only
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import 'package:project_flutter_khmer25/providers/auth_provider.dart';
 import 'package:project_flutter_khmer25/providers/cart_provider.dart';
+import 'package:project_flutter_khmer25/providers/order_provider.dart';
 
 class CartScreen extends StatefulWidget {
   const CartScreen({super.key});
@@ -19,6 +24,22 @@ class CartScreen extends StatefulWidget {
 
 class _CartScreenState extends State<CartScreen> {
   bool _inited = false;
+
+  // ---------- Safe parsers (fix String vs num) ----------
+  int _asInt(dynamic v, {int fallback = 0}) {
+    if (v == null) return fallback;
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    if (v is String) return int.tryParse(v) ?? fallback;
+    return fallback;
+  }
+
+  num _asNum(dynamic v, {num fallback = 0}) {
+    if (v == null) return fallback;
+    if (v is num) return v;
+    if (v is String) return num.tryParse(v) ?? fallback;
+    return fallback;
+  }
 
   @override
   void didChangeDependencies() {
@@ -35,8 +56,7 @@ class _CartScreenState extends State<CartScreen> {
   }
 
   // ✅ sample PayWay link builder
-  // Best practice: your backend should generate this link securely.
-  String _buildPayWayLink({required double amount}) {
+  String _buildPayWayLink({required num amount}) {
     final amt = amount.toStringAsFixed(0);
     return "https://link.payway.com.kh/aba?id=FA16B4CB56DF&dynamic=true&source_caller=sdk&pid=af_app_invites&link_action=abaqr&shortlink=qi6y4hz0&amount=$amt&created_from_app=true&acc=012333176&af_siteid=968860649&userid=FA16B4CB56DF&code=719145&c=abaqr&af_referrer_uid=1760314176853-4531428";
   }
@@ -51,11 +71,11 @@ class _CartScreenState extends State<CartScreen> {
   }
 
   Future<void> _openPayWay({required String url, required String title}) async {
-    // ✅ WEB: open new tab (external) -> fixes "embedded" error
+    // ✅ WEB: open new tab (external)
     if (kIsWeb) {
       final ok = await launchUrl(
         Uri.parse(url),
-        mode: LaunchMode.externalApplication, // opens new tab on web
+        mode: LaunchMode.externalApplication,
       );
       if (!ok && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -65,11 +85,6 @@ class _CartScreenState extends State<CartScreen> {
       return;
     }
 
-    // ✅ MOBILE: you can choose external browser OR in-app webview
-    // Option A (recommended): external browser
-    // await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-
-    // Option B: in-app webview (your current UI)
     if (!mounted) return;
     Navigator.push(
       context,
@@ -79,10 +94,64 @@ class _CartScreenState extends State<CartScreen> {
     );
   }
 
+  Future<void> _handleCheckout() async {
+    final auth = context.read<AuthProvider>();
+    final cartProv = context.read<CartProvider>();
+    final orderProv = context.read<OrderProvider>();
+
+    final cart = cartProv.cart;
+    if (cart == null || cart.items.isEmpty) return;
+
+    final info = await _openShippingSheet(context);
+    if (info == null) return;
+
+    if (!mounted) return;
+
+    final Map<String, dynamic>? order = await orderProv.checkout(
+      phone: info.phone,
+      address: info.address,
+      note: info.note,
+      accessToken: auth.access,
+    );
+
+    if (!mounted) return;
+
+    if (order == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(orderProv.error ?? "Checkout failed")),
+      );
+      return;
+    }
+
+    final int orderId = _asInt(order["id"]);
+    final String orderCode = (order["order_code"] ?? "").toString();
+    final num total = _asNum(order["total"]);
+
+    final payUrl = _buildPayWayLink(amount: total);
+
+    // ✅ NEW: go to a step screen (beautiful UI)
+    final uploaded = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PaymentFlowScreen(
+          orderId: orderId,
+          orderCode: orderCode,
+          total: total,
+          payUrl: payUrl,
+        ),
+      ),
+    );
+
+    if (uploaded == true) {
+      await cartProv.fetchCart(accessToken: auth.access);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final cartProv = context.watch<CartProvider>();
+    final orderProv = context.watch<OrderProvider>();
 
     if (!auth.isLoggedIn) {
       return Scaffold(
@@ -154,6 +223,13 @@ class _CartScreenState extends State<CartScreen> {
                     },
                   ),
                 ),
+                if (orderProv.error != null) ...[
+                  const SizedBox(height: 12),
+                  _ErrorBox(
+                    message: orderProv.error!,
+                    onRetry: _handleCheckout,
+                  ),
+                ],
               ],
             ),
       bottomNavigationBar: (cart == null || cart.items.isEmpty)
@@ -188,36 +264,21 @@ class _CartScreenState extends State<CartScreen> {
                             borderRadius: BorderRadius.circular(14),
                           ),
                         ),
-                        onPressed: () async {
-                          // 1) ask shipping info
-                          final info = await _openShippingSheet(context);
-                          if (info == null) return;
-
-                          if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                "បានរក្សាទុក ✅ ${info.phone} • ${info.shortAddress}",
+                        onPressed: (orderProv.isLoading || cartProv.isLoading)
+                            ? null
+                            : _handleCheckout,
+                        child: orderProv.isLoading
+                            ? const SizedBox(
+                                height: 18,
+                                width: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text(
+                                "Checkout",
+                                style: TextStyle(fontWeight: FontWeight.w900),
                               ),
-                              duration: const Duration(seconds: 2),
-                            ),
-                          );
-
-                          // 2) build PayWay URL
-                          final payUrl = _buildPayWayLink(
-                            amount: cartProv.totalPrice,
-                          );
-
-                          // ✅ FIX HERE
-                          await _openPayWay(
-                            url: payUrl,
-                            title: "ទូទាត់តាម ABA KHQR",
-                          );
-                        },
-                        child: const Text(
-                          "Checkout",
-                          style: TextStyle(fontWeight: FontWeight.w900),
-                        ),
                       ),
                     ),
                   ],
@@ -227,6 +288,186 @@ class _CartScreenState extends State<CartScreen> {
     );
   }
 }
+
+/* ===================== UPLOAD PAYMENT SCREEN ===================== */
+
+class UploadPaymentScreen extends StatefulWidget {
+  final int orderId;
+  final String orderCode;
+  final num total;
+
+  const UploadPaymentScreen({
+    super.key,
+    required this.orderId,
+    required this.orderCode,
+    required this.total,
+  });
+
+  @override
+  State<UploadPaymentScreen> createState() => _UploadPaymentScreenState();
+}
+
+class _UploadPaymentScreenState extends State<UploadPaymentScreen> {
+  Uint8List? _bytes;
+  String? _filename;
+  final _noteCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _noteCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickImage() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        withData: true, // ✅ required for web
+      );
+      if (result == null || result.files.isEmpty) return;
+
+      final f = result.files.first;
+      if (f.bytes == null) return;
+
+      setState(() {
+        _bytes = f.bytes;
+        _filename = f.name;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("FilePicker error: $e")));
+    }
+  }
+
+  Future<void> _upload() async {
+    final auth = context.read<AuthProvider>();
+    final orderProv = context.read<OrderProvider>();
+
+    if (_bytes == null || _filename == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("សូមជ្រើស Screenshot មុន 🙏")),
+      );
+      return;
+    }
+
+    final ok = await orderProv.uploadProof(
+      orderId: widget.orderId,
+      bytes: _bytes!,
+      filename: _filename!,
+      note: _noteCtrl.text.trim(),
+      accessToken: auth.access,
+    );
+
+    if (!mounted) return;
+
+    if (ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("បានផ្ញើភស្តុតាងទូទាត់ ✅ រង់ចាំ Admin ពិនិត្យ"),
+        ),
+      );
+      Navigator.pop(context, true);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(orderProv.error ?? "Upload failed")),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final orderProv = context.watch<OrderProvider>();
+    final totalText = widget.total.toString().replaceAll(".00", "");
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF7F7FB),
+      appBar: AppBar(
+        title: const Text("ផ្ញើភស្តុតាងទូទាត់"),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Order: ${widget.orderCode}",
+              style: const TextStyle(fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              "Amount: $totalText៛",
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 12),
+
+            InkWell(
+              onTap: orderProv.isLoading ? null : _pickImage,
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                height: 190,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  color: Colors.white,
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: _bytes == null
+                    ? const Center(
+                        child: Text("ចុចដើម្បីជ្រើស Screenshot (ABA)"),
+                      )
+                    : ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.memory(_bytes!, fit: BoxFit.cover),
+                      ),
+              ),
+            ),
+
+            const SizedBox(height: 12),
+            TextField(
+              controller: _noteCtrl,
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: "ចំណាំ (ជម្រើស)",
+                border: OutlineInputBorder(),
+              ),
+            ),
+
+            const Spacer(),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: orderProv.isLoading ? null : _upload,
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                child: orderProv.isLoading
+                    ? const SizedBox(
+                        height: 18,
+                        width: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text(
+                        "Upload ទៅ Admin",
+                        style: TextStyle(fontWeight: FontWeight.w900),
+                      ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/* ===================== SHIPPING BOTTOM SHEET (keep yours) ===================== */
+// (Keep your _ShippingInfo, _ShippingBottomSheet, _PrettyField, PayWayCheckoutPage, UI widgets, _fmt)
 
 /* ===================== SHIPPING BOTTOM SHEET ===================== */
 
@@ -521,8 +762,8 @@ class _PrettyField extends StatelessWidget {
                   keyboardType: keyboardType,
                   maxLines: maxLines,
                   validator: validator,
-                  decoration: const InputDecoration(
-                    hintText: "",
+                  decoration: InputDecoration(
+                    hintText: hint,
                     isDense: true,
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.zero,
@@ -575,15 +816,12 @@ class _PayWayCheckoutPageState extends State<PayWayCheckoutPage> {
               supportZoom: false,
               useShouldOverrideUrlLoading: true,
             ),
-            onLoadStart: (_, __) {
-              if (mounted) setState(() => _loading = true);
-            },
-            onLoadStop: (_, __) {
-              if (mounted) setState(() => _loading = false);
-            },
-            onReceivedError: (_, __, ___) {
-              if (mounted) setState(() => _loading = false);
-            },
+            onLoadStart: (_, __) =>
+                mounted ? setState(() => _loading = true) : null,
+            onLoadStop: (_, __) =>
+                mounted ? setState(() => _loading = false) : null,
+            onReceivedError: (_, __, ___) =>
+                mounted ? setState(() => _loading = false) : null,
           ),
           if (_loading)
             Positioned.fill(
@@ -598,7 +836,7 @@ class _PayWayCheckoutPageState extends State<PayWayCheckoutPage> {
   }
 }
 
-/* ===================== CART UI WIDGETS ===================== */
+/* ===================== CART UI WIDGETS (same as yours) ===================== */
 
 class _SummaryHeader extends StatelessWidget {
   final int totalItems;
