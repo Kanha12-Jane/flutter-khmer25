@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:project_flutter_khmer25/screens/payment_flow_screen.dart';
 import 'package:provider/provider.dart';
@@ -165,7 +165,10 @@ class _CartScreenState extends State<CartScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF7F7FB),
       appBar: AppBar(
-        title: const Text("កន្ត្រក"),
+        title: const Text(
+          "កន្ត្រក",
+          style: TextStyle(fontWeight: FontWeight.w900),
+        ),
         elevation: 0,
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
@@ -257,34 +260,168 @@ class _CartScreenState extends State<CartScreen> {
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
+                      child: _GradientButton(
+                        text: "Checkout",
+                        icon: Icons.lock_outline,
+                        loading: orderProv.isLoading,
                         onPressed: (orderProv.isLoading || cartProv.isLoading)
                             ? null
                             : _handleCheckout,
-                        child: orderProv.isLoading
-                            ? const SizedBox(
-                                height: 18,
-                                width: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Text(
-                                "Checkout",
-                                style: TextStyle(fontWeight: FontWeight.w900),
-                              ),
                       ),
                     ),
                   ],
                 ),
               ),
             ),
+    );
+  }
+}
+
+/* ===================== COMMON BUTTONS (NEW UI) ===================== */
+
+class _GradientButton extends StatelessWidget {
+  final String text;
+  final IconData icon;
+  final bool loading;
+  final VoidCallback? onPressed;
+
+  const _GradientButton({
+    required this.text,
+    required this.icon,
+    required this.loading,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onPressed != null && !loading;
+    return Opacity(
+      opacity: enabled ? 1 : 0.60,
+      child: Container(
+        height: 52,
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF2563EB), Color(0xFF7C3AED)],
+          ),
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(.12),
+              blurRadius: 18,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: ElevatedButton(
+          onPressed: enabled ? onPressed : null,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.transparent,
+            disabledBackgroundColor: Colors.transparent,
+            shadowColor: Colors.transparent,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (loading)
+                const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                )
+              else
+                Icon(icon, color: Colors.white),
+              const SizedBox(width: 10),
+              Text(
+                loading ? "Processing..." : text,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 15,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SoftButton extends StatelessWidget {
+  final String text;
+  final IconData icon;
+  final Color color;
+  final VoidCallback? onPressed;
+
+  const _SoftButton({
+    required this.text,
+    required this.icon,
+    required this.color,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 48,
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, color: color),
+        label: Text(
+          text,
+          style: TextStyle(color: color, fontWeight: FontWeight.w900),
+        ),
+        style: OutlinedButton.styleFrom(
+          backgroundColor: color.withOpacity(.08),
+          side: BorderSide(color: color.withOpacity(.25)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DangerButton extends StatelessWidget {
+  final String text;
+  final IconData icon;
+  final VoidCallback? onPressed;
+
+  const _DangerButton({
+    required this.text,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Colors.red.shade700;
+    return SizedBox(
+      height: 48,
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, color: color),
+        label: Text(
+          text,
+          style: TextStyle(color: color, fontWeight: FontWeight.w900),
+        ),
+        style: OutlinedButton.styleFrom(
+          backgroundColor: const Color(0xFFFFEBEE),
+          side: const BorderSide(color: Color(0xFFFFCDD2)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -380,94 +517,144 @@ class _UploadPaymentScreenState extends State<UploadPaymentScreen> {
   Widget build(BuildContext context) {
     final orderProv = context.watch<OrderProvider>();
     final totalText = widget.total.toString().replaceAll(".00", "");
+    final busy = orderProv.isLoading;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7F7FB),
       appBar: AppBar(
-        title: const Text("ផ្ញើភស្តុតាងទូទាត់"),
+        title: const Text(
+          "ផ្ញើភស្តុតាងទូទាត់",
+          style: TextStyle(fontWeight: FontWeight.w900),
+        ),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
+        elevation: 0,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              "Order: ${widget.orderCode}",
-              style: const TextStyle(fontWeight: FontWeight.w900),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              "Amount: $totalText៛",
-              style: const TextStyle(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 12),
-
-            InkWell(
-              onTap: orderProv.isLoading ? null : _pickImage,
-              borderRadius: BorderRadius.circular(16),
-              child: Container(
-                height: 190,
-                width: double.infinity,
+      body: Stack(
+        children: [
+          ListView(
+            padding: const EdgeInsets.all(14),
+            children: [
+              Container(
+                padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(18),
                   color: Colors.white,
                   border: Border.all(color: Colors.grey.shade200),
+                  boxShadow: [
+                    BoxShadow(
+                      blurRadius: 16,
+                      offset: const Offset(0, 6),
+                      color: Colors.black.withOpacity(0.04),
+                    ),
+                  ],
                 ),
-                child: _bytes == null
-                    ? const Center(
-                        child: Text("ចុចដើម្បីជ្រើស Screenshot (ABA)"),
-                      )
-                    : ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
-                        child: Image.memory(_bytes!, fit: BoxFit.cover),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Order: ${widget.orderCode}",
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      "Amount: $totalText៛",
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              InkWell(
+                onTap: busy ? null : _pickImage,
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  height: 190,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    color: Colors.white,
+                    border: Border.all(color: Colors.grey.shade200),
+                    boxShadow: [
+                      BoxShadow(
+                        blurRadius: 16,
+                        offset: const Offset(0, 6),
+                        color: Colors.black.withOpacity(0.04),
                       ),
+                    ],
+                  ),
+                  child: _bytes == null
+                      ? Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.image_outlined,
+                                size: 44,
+                                color: Colors.grey.shade400,
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                "ចុចដើម្បីជ្រើស Screenshot (ABA)",
+                                style: TextStyle(fontWeight: FontWeight.w800),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                "PNG / JPG",
+                                style: TextStyle(color: Colors.grey.shade700),
+                              ),
+                            ],
+                          ),
+                        )
+                      : ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: Image.memory(_bytes!, fit: BoxFit.cover),
+                        ),
+                ),
               ),
-            ),
-
-            const SizedBox(height: 12),
-            TextField(
-              controller: _noteCtrl,
-              maxLines: 2,
-              decoration: const InputDecoration(
-                labelText: "ចំណាំ (ជម្រើស)",
-                border: OutlineInputBorder(),
-              ),
-            ),
-
-            const Spacer(),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: orderProv.isLoading ? null : _upload,
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
+              const SizedBox(height: 12),
+              TextField(
+                controller: _noteCtrl,
+                maxLines: 2,
+                enabled: !busy,
+                decoration: InputDecoration(
+                  labelText: "ចំណាំ (ជម្រើស)",
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),
                 ),
-                child: orderProv.isLoading
-                    ? const SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text(
-                        "Upload ទៅ Admin",
-                        style: TextStyle(fontWeight: FontWeight.w900),
-                      ),
+              ),
+              const SizedBox(height: 14),
+              _GradientButton(
+                text: "Upload ទៅ Admin",
+                icon: Icons.cloud_upload_outlined,
+                loading: busy,
+                onPressed: busy ? null : _upload,
+              ),
+              const SizedBox(height: 10),
+              _SoftButton(
+                text: "ជ្រើសរើសរូបភាពម្តងទៀត",
+                icon: Icons.photo_library_outlined,
+                color: const Color(0xFF2563EB),
+                onPressed: busy ? null : _pickImage,
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
+          if (busy)
+            Positioned.fill(
+              child: Container(
+                color: Colors.black.withOpacity(0.05),
+                child: const Center(child: CircularProgressIndicator()),
               ),
             ),
-          ],
-        ),
+        ],
       ),
     );
   }
 }
-
-/* ===================== SHIPPING BOTTOM SHEET (keep yours) ===================== */
-// (Keep your _ShippingInfo, _ShippingBottomSheet, _PrettyField, PayWayCheckoutPage, UI widgets, _fmt)
 
 /* ===================== SHIPPING BOTTOM SHEET ===================== */
 
@@ -533,7 +720,7 @@ class _ShippingBottomSheetState extends State<_ShippingBottomSheet> {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _saving = true);
-    await Future.delayed(const Duration(milliseconds: 350));
+    await Future.delayed(const Duration(milliseconds: 250));
     if (!mounted) return;
 
     setState(() => _saving = false);
@@ -588,13 +775,11 @@ class _ShippingBottomSheetState extends State<_ShippingBottomSheet> {
                     height: 44,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(16),
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.primary.withOpacity(0.10),
+                      color: const Color(0xFF2563EB).withOpacity(0.10),
                     ),
-                    child: Icon(
+                    child: const Icon(
                       Icons.local_shipping_outlined,
-                      color: Theme.of(context).colorScheme.primary,
+                      color: Color(0xFF2563EB),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -653,40 +838,20 @@ class _ShippingBottomSheetState extends State<_ShippingBottomSheet> {
               Row(
                 children: [
                   Expanded(
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
+                    child: _SoftButton(
+                      text: "បោះបង់",
+                      icon: Icons.close,
+                      color: const Color(0xFF64748B),
                       onPressed: _saving ? null : () => Navigator.pop(context),
-                      child: const Text(
-                        "បោះបង់",
-                        style: TextStyle(fontWeight: FontWeight.w900),
-                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
+                    child: _GradientButton(
+                      text: "បន្តទៅទូទាត់",
+                      icon: Icons.arrow_forward_rounded,
+                      loading: _saving,
                       onPressed: _saving ? null : _submit,
-                      child: _saving
-                          ? const SizedBox(
-                              height: 18,
-                              width: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text(
-                              "បន្តទៅទូទាត់",
-                              style: TextStyle(fontWeight: FontWeight.w900),
-                            ),
                     ),
                   ),
                 ],
@@ -737,12 +902,9 @@ class _PrettyField extends StatelessWidget {
             height: 40,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
-              color: Theme.of(context).colorScheme.primary.withOpacity(0.10),
+              color: const Color(0xFF2563EB).withOpacity(0.10),
             ),
-            child: Icon(
-              prefixIcon,
-              color: Theme.of(context).colorScheme.primary,
-            ),
+            child: Icon(prefixIcon, color: const Color(0xFF2563EB)),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -762,8 +924,8 @@ class _PrettyField extends StatelessWidget {
                   keyboardType: keyboardType,
                   maxLines: maxLines,
                   validator: validator,
-                  decoration: InputDecoration(
-                    hintText: hint,
+                  decoration: const InputDecoration(
+                    hintText: "",
                     isDense: true,
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.zero,
@@ -802,7 +964,10 @@ class _PayWayCheckoutPageState extends State<PayWayCheckoutPage> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Text(widget.title),
+        title: Text(
+          widget.title,
+          style: const TextStyle(fontWeight: FontWeight.w900),
+        ),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
         elevation: 0,
@@ -836,7 +1001,7 @@ class _PayWayCheckoutPageState extends State<PayWayCheckoutPage> {
   }
 }
 
-/* ===================== CART UI WIDGETS (same as yours) ===================== */
+/* ===================== CART UI WIDGETS ===================== */
 
 class _SummaryHeader extends StatelessWidget {
   final int totalItems;
@@ -855,6 +1020,13 @@ class _SummaryHeader extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         color: Colors.white,
         border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+            color: Colors.black.withOpacity(0.04),
+          ),
+        ],
       ),
       child: Row(
         children: [
@@ -863,11 +1035,11 @@ class _SummaryHeader extends StatelessWidget {
             height: 42,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
-              color: Theme.of(context).colorScheme.primary.withOpacity(0.10),
+              color: const Color(0xFF2563EB).withOpacity(0.10),
             ),
-            child: Icon(
+            child: const Icon(
               Icons.shopping_bag_outlined,
-              color: Theme.of(context).colorScheme.primary,
+              color: Color(0xFF2563EB),
             ),
           ),
           const SizedBox(width: 12),
@@ -959,6 +1131,8 @@ class _CartItemCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final primary = const Color(0xFF2563EB);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),
@@ -1008,45 +1182,51 @@ class _CartItemCard extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(
                   priceText,
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.primary,
-                    fontWeight: FontWeight.w900,
-                  ),
+                  style: TextStyle(color: primary, fontWeight: FontWeight.w900),
                 ),
                 const SizedBox(height: 10),
                 Row(
                   children: [
-                    _QtyButton(
+                    // ✅ UPDATED: solid background minus
+                    _QtyButtonSolid(
                       icon: Icons.remove,
                       onTap: onMinus,
                       disabled: qty <= 1,
                     ),
                     const SizedBox(width: 10),
+
+                    // ✅ UPDATED: qty box solid background
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
+                      height: 38,
+                      alignment: Alignment.center,
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(12),
-                        color: const Color(0xFFF7F7FB),
-                        border: Border.all(color: Colors.grey.shade200),
+                        color: const Color(0xFFEEF2FF), // solid light
+                        border: Border.all(
+                          color: const Color(0xFF2563EB).withOpacity(.35),
+                        ),
                       ),
                       child: Text(
                         "$qty",
                         style: const TextStyle(
                           fontWeight: FontWeight.w900,
                           fontSize: 16,
+                          color: Color(0xFF1E40AF),
                         ),
                       ),
                     ),
+
                     const SizedBox(width: 10),
-                    _QtyButton(icon: Icons.add, onTap: onPlus),
-                    const Spacer(),
-                    IconButton(
-                      onPressed: onRemove,
-                      icon: const Icon(Icons.delete_outline),
+
+                    // ✅ UPDATED: solid background plus
+                    _QtyButtonSolid(
+                      icon: Icons.add,
+                      onTap: onPlus,
+                      disabled: false,
                     ),
+                    const Spacer(),
+                    _IconDangerButton(onTap: onRemove),
                   ],
                 ),
               ],
@@ -1058,33 +1238,70 @@ class _CartItemCard extends StatelessWidget {
   }
 }
 
-class _QtyButton extends StatelessWidget {
+/// ✅ NEW: Solid background qty button (plus/minus)
+class _QtyButtonSolid extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
   final bool disabled;
 
-  const _QtyButton({
+  const _QtyButtonSolid({
     required this.icon,
     required this.onTap,
-    this.disabled = false,
+    required this.disabled,
   });
+
+  @override
+  Widget build(BuildContext context) {
+    const primary = Color(0xFF2563EB);
+
+    final bg = disabled ? const Color(0xFFE5E7EB) : primary;
+    final border = disabled ? const Color(0xFFD1D5DB) : const Color(0xFF1D4ED8);
+    final iconColor = disabled ? const Color(0xFF6B7280) : Colors.white;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: disabled ? null : onTap,
+      child: Container(
+        width: 40,
+        height: 38,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          color: bg, // ✅ SOLID
+          border: Border.all(color: border),
+          boxShadow: disabled
+              ? []
+              : [
+                  BoxShadow(
+                    blurRadius: 10,
+                    offset: const Offset(0, 6),
+                    color: primary.withOpacity(.20),
+                  ),
+                ],
+        ),
+        child: Icon(icon, size: 18, color: iconColor),
+      ),
+    );
+  }
+}
+
+class _IconDangerButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _IconDangerButton({required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
       borderRadius: BorderRadius.circular(12),
-      onTap: disabled ? null : onTap,
-      child: Opacity(
-        opacity: disabled ? 0.45 : 1,
-        child: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey.shade300),
-            color: Colors.white,
-          ),
-          child: Icon(icon, size: 18),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          color: const Color(0xFFFFEBEE),
+          border: Border.all(color: const Color(0xFFFFCDD2)),
         ),
+        child: Icon(Icons.delete_outline, color: Colors.red.shade700),
       ),
     );
   }
@@ -1104,6 +1321,13 @@ class _EmptyCart extends StatelessWidget {
             borderRadius: BorderRadius.circular(20),
             color: Colors.white,
             border: Border.all(color: Colors.grey.shade200),
+            boxShadow: [
+              BoxShadow(
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+                color: Colors.black.withOpacity(0.04),
+              ),
+            ],
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1149,6 +1373,13 @@ class _ErrorBox extends StatelessWidget {
             borderRadius: BorderRadius.circular(18),
             color: Colors.white,
             border: Border.all(color: Colors.grey.shade200),
+            boxShadow: [
+              BoxShadow(
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+                color: Colors.black.withOpacity(0.04),
+              ),
+            ],
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1161,10 +1392,11 @@ class _ErrorBox extends StatelessWidget {
                 style: const TextStyle(fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 12),
-              ElevatedButton.icon(
+              _GradientButton(
+                text: "សាកម្តងទៀត",
+                icon: Icons.refresh,
+                loading: false,
                 onPressed: onRetry,
-                icon: const Icon(Icons.refresh),
-                label: const Text("សាកម្តងទៀត"),
               ),
             ],
           ),

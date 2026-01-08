@@ -45,6 +45,7 @@ class _ProductCard extends StatelessWidget {
           );
         },
         child: Card(
+          color: Colors.white,
           clipBehavior: Clip.antiAlias,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),

@@ -10,7 +10,7 @@ import 'package:project_flutter_khmer25/providers/category_provider.dart';
 import 'package:project_flutter_khmer25/providers/product_provider.dart';
 import 'package:project_flutter_khmer25/providers/category_product_provider.dart';
 import 'package:project_flutter_khmer25/providers/cart_provider.dart';
-import 'package:project_flutter_khmer25/providers/order_provider.dart'; // ✅ NEW
+import 'package:project_flutter_khmer25/providers/order_provider.dart';
 
 import 'package:project_flutter_khmer25/screens/home_screen.dart';
 import 'package:project_flutter_khmer25/screens/category_screen.dart';
@@ -18,8 +18,6 @@ import 'package:project_flutter_khmer25/screens/order_history_screen.dart';
 import 'package:project_flutter_khmer25/screens/profile_screen.dart';
 import 'package:project_flutter_khmer25/screens/product_list_screen.dart';
 import 'package:project_flutter_khmer25/screens/category_product_screen.dart';
-
-import 'package:project_flutter_khmer25/screens/favorite_screen.dart';
 import 'package:project_flutter_khmer25/screens/cart_screen.dart';
 
 void main() {
@@ -31,9 +29,9 @@ void main() {
         ChangeNotifierProvider(
           create: (_) => CategoryProvider()..loadCategories(),
         ),
-        ChangeNotifierProvider(
-          create: (_) => ProductProvider()..fetchProducts(),
-        ),
+
+        // ✅ ProductProvider (pagination) => NO fetchProducts() here
+        ChangeNotifierProvider(create: (_) => ProductProvider()),
 
         // ✅ Auth
         ChangeNotifierProvider(
@@ -47,7 +45,8 @@ void main() {
           create: (_) => CartProvider(),
           update: (_, auth, cart) {
             cart ??= CartProvider();
-            final String? token = auth.access; // must match AuthProvider
+            final String? token = auth.access;
+
             if (auth.isLoggedIn && token != null && token.isNotEmpty) {
               Future.microtask(() => cart!.fetchCart(accessToken: token));
             } else {
@@ -57,7 +56,7 @@ void main() {
           },
         ),
 
-        // ✅ NEW: OrderProvider depends on auth token (same style)
+        // ✅ OrderProvider depends on auth token
         ChangeNotifierProxyProvider<AuthProvider, OrderProvider>(
           create: (_) => OrderProvider(),
           update: (_, auth, orderProv) {
@@ -65,7 +64,6 @@ void main() {
             final String? token = auth.access;
 
             if (auth.isLoggedIn && token != null && token.isNotEmpty) {
-              // Optional: auto load orders when login
               Future.microtask(
                 () => orderProv!.fetchMyOrders(accessToken: token),
               );
@@ -86,13 +84,27 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const seed = Color(0xff2563EB);
+
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Khmer25',
       theme: ThemeData(
-        primaryColor: const Color(0xff2ecc71),
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff2ecc71)),
+        useMaterial3: true,
+        primaryColor: seed,
+        colorScheme: ColorScheme.fromSeed(seedColor: seed, primary: seed),
         fontFamily: 'Khmer',
+        scaffoldBackgroundColor: Colors.white,
+
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+          elevation: 0,
+          surfaceTintColor: Colors.transparent,
+          shadowColor: Colors.black12,
+          scrolledUnderElevation: 2,
+          iconTheme: IconThemeData(color: Colors.black),
+        ),
       ),
       home: const HomePage(),
     );
@@ -132,85 +144,100 @@ class _HomePageState extends State<HomePage> {
   }
 
   Drawer _buildDrawer() {
-    return Drawer(
-      child: ListView(
-        padding: EdgeInsets.zero,
-        children: [
-          DrawerHeader(
-            decoration: BoxDecoration(color: Theme.of(context).primaryColor),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  height: 48,
-                  child: Image.asset(
-                    'assets/images/logo.png',
-                    fit: BoxFit.contain,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Khmer25 Mart',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  'សូមស្វាគមន៍មកកាន់ការទិញទំនិញ ក្នុងសម័យទំនើប',
-                  style: TextStyle(color: Colors.white70, fontSize: 12),
-                ),
-              ],
-            ),
-          ),
+    final primary = Theme.of(context).primaryColor;
 
-          // 👉 Drawer items
-          ListTile(
-            leading: const Icon(Icons.home_outlined),
-            title: const Text('ទំព័រដើម'),
-            selected: _selectedIndex == tabHome,
-            selectedColor: Theme.of(context).primaryColor,
-            onTap: () => _setTab(tabHome),
-          ),
-          ListTile(
-            leading: const Icon(Icons.category_outlined),
-            title: const Text('ប្រភេទ'),
-            selected: _selectedIndex == tabCategory,
-            selectedColor: Theme.of(context).primaryColor,
-            onTap: () => _setTab(tabCategory),
-          ),
-          ListTile(
-            leading: const Icon(Icons.history_outlined),
-            title: const Text('ប្រវត្តិការកម្មង់'),
-            selected: _selectedIndex == tabHistory,
-            selectedColor: Theme.of(context).primaryColor,
-            onTap: () => _setTab(tabHistory),
-          ),
-          ListTile(
-            leading: const Icon(Icons.person_outline),
-            title: const Text('គណនី'),
-            selected: _selectedIndex == tabProfile,
-            selectedColor: Theme.of(context).primaryColor,
-            onTap: () => _setTab(tabProfile),
-          ),
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.fiber_new_outlined),
-            title: const Text('ទំនិញថ្មីៗ'),
-            selected: _selectedIndex == tabNewProducts,
-            selectedColor: Theme.of(context).primaryColor,
-            onTap: () => _setTab(tabNewProducts),
-          ),
-          ListTile(
-            leading: const Icon(Icons.discount_outlined),
-            title: const Text('ទំនិញបញ្ចុះតម្លៃ'),
-            selected: _selectedIndex == tabDiscountProducts,
-            selectedColor: Theme.of(context).primaryColor,
-            onTap: () => _setTab(tabDiscountProducts),
-          ),
-        ],
+    return Drawer(
+      child: SafeArea(
+        child: Column(
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [primary, primary.withOpacity(0.86)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    height: 46,
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Khmer25 Mart',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'សូមស្វាគមន៍មកកាន់ការទិញទំនិញ ក្នុងសម័យទំនើប',
+                    style: TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                children: [
+                  _DrawerItem(
+                    icon: Icons.home_outlined,
+                    title: 'ទំព័រដើម',
+                    selected: _selectedIndex == tabHome,
+                    onTap: () => _setTab(tabHome),
+                  ),
+                  _DrawerItem(
+                    icon: Icons.category_outlined,
+                    title: 'ប្រភេទ',
+                    selected: _selectedIndex == tabCategory,
+                    onTap: () => _setTab(tabCategory),
+                  ),
+                  _DrawerItem(
+                    icon: Icons.history_outlined,
+                    title: 'ប្រវត្តិការកម្មង់',
+                    selected: _selectedIndex == tabHistory,
+                    onTap: () => _setTab(tabHistory),
+                  ),
+                  _DrawerItem(
+                    icon: Icons.person_outline,
+                    title: 'គណនី',
+                    selected: _selectedIndex == tabProfile,
+                    onTap: () => _setTab(tabProfile),
+                  ),
+                  const SizedBox(height: 10),
+                  const Divider(height: 1),
+                  const SizedBox(height: 10),
+                  const _DrawerSectionTitle(text: "ផលិតផល"),
+                  const SizedBox(height: 8),
+                  _DrawerItem(
+                    icon: Icons.fiber_new_outlined,
+                    title: 'ទំនិញថ្មីៗ',
+                    selected: _selectedIndex == tabNewProducts,
+                    onTap: () => _setTab(tabNewProducts),
+                  ),
+                  _DrawerItem(
+                    icon: Icons.discount_outlined,
+                    title: 'ទំនិញបញ្ចុះតម្លៃ',
+                    selected: _selectedIndex == tabDiscountProducts,
+                    onTap: () => _setTab(tabDiscountProducts),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -228,6 +255,10 @@ class _HomePageState extends State<HomePage> {
               onPressed: () => _setTab(tabHome),
             )
           : null,
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(1),
+        child: Container(height: 1, color: Colors.black.withOpacity(0.06)),
+      ),
       title: Row(
         children: [
           const SizedBox(width: 8),
@@ -238,13 +269,6 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
       actions: [
-        // IconButton(
-        //   onPressed: () => Navigator.push(
-        //     context,
-        //     MaterialPageRoute(builder: (_) => const FavoriteScreen()),
-        //   ),
-        //   icon: const Icon(Icons.favorite_border),
-        // ),
         IconButton(
           onPressed: () => Navigator.push(
             context,
@@ -280,9 +304,15 @@ class _HomePageState extends State<HomePage> {
           : CategoryProductScreen(initialParent: _openCategory!),
     ];
 
+    // ✅ safety guard (avoid range error)
+    if (_selectedIndex < 0 || _selectedIndex >= screens.length) {
+      _selectedIndex = tabHome;
+    }
+
     final bool isCategoryProducts = _selectedIndex == tabCategoryProducts;
 
     return Scaffold(
+      backgroundColor: Colors.white,
       drawer: _buildDrawer(),
       appBar: _buildAppBar(showBack: isCategoryProducts),
       body: screens[_selectedIndex],
@@ -290,8 +320,11 @@ class _HomePageState extends State<HomePage> {
         currentIndex: (_selectedIndex > 3) ? 0 : _selectedIndex,
         onTap: (index) => _setTab(index),
         type: BottomNavigationBarType.fixed,
-        selectedItemColor: const Color(0xff2ecc71),
+        backgroundColor: Colors.white,
+        elevation: 6,
+        selectedItemColor: const Color(0xff2563EB),
         unselectedItemColor: Colors.grey.shade600,
+        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w700),
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.home_outlined),
@@ -319,7 +352,102 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-// ✅ Badge widget
+/// ✅ Drawer item that looks like a “button”
+class _DrawerItem extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _DrawerItem({
+    required this.icon,
+    required this.title,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).primaryColor;
+    final bg = selected
+        ? primary.withOpacity(0.12)
+        : Colors.grey.withOpacity(0.06);
+    final border = selected
+        ? primary.withOpacity(0.22)
+        : Colors.grey.withOpacity(0.10);
+    final iconColor = selected ? primary : Colors.grey.shade800;
+    final textColor = selected ? Colors.black : Colors.black87;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Material(
+        color: bg,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: border),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: selected ? primary.withOpacity(0.14) : Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.black.withOpacity(0.06)),
+                  ),
+                  child: Icon(icon, color: iconColor, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: 14,
+                      fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                    ),
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: Colors.black.withOpacity(0.35),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DrawerSectionTitle extends StatelessWidget {
+  final String text;
+  const _DrawerSectionTitle({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 0.2,
+        color: Colors.black.withOpacity(0.55),
+      ),
+    );
+  }
+}
+
 class _CartBadgeIcon extends StatelessWidget {
   final int qty;
   const _CartBadgeIcon({required this.qty});
